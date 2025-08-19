@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MTurk (CORS-Free)
 // @namespace    http://violentmonkey.github.io/
-// @version      1.2
+// @version      1.3
 // @description  CORS issues with auto-update check
 // @author       You
 // @match        https://worker.mturk.com/dashboard*
