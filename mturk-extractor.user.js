@@ -7,6 +7,8 @@
 // @match        https://worker.mturk.com/dashboard*
 // @grant        GM_xmlhttpRequest
 // @run-at       document-idle
+// @updateURL    https://raw.githubusercontent.com/Vinylgeorge/mturk-userscript/main/mturk-extractor.user.js
+// @downloadURL  https://raw.githubusercontent.com/Vinylgeorge/mturk-userscript/main/mturk-extractor.user.js
 // ==/UserScript==
 
 (function() {
