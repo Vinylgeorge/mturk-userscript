@@ -2,10 +2,11 @@
 // @name         MTurk (CORS-Free)
 // @namespace    http://violentmonkey.github.io/
 // @version      1.2
-// @description  CORS issues
+// @description  CORS issues with auto-update check
 // @author       You
 // @match        https://worker.mturk.com/dashboard*
 // @grant        GM_xmlhttpRequest
+// @grant        GM_info
 // @run-at       document-idle
 // @updateURL    https://raw.githubusercontent.com/Vinylgeorge/mturk-userscript/main/mturk-extractor.user.js
 // @downloadURL  https://raw.githubusercontent.com/Vinylgeorge/mturk-userscript/main/mturk-extractor.user.js
@@ -16,7 +17,152 @@
 
     console.log('🤖 Violentmonkey MTurk Auto Extractor loaded');
 
-    // Wait for page to fully load
+    // Function to check for updates
+    function checkForUpdates() {
+        console.log('🔄 Checking for script updates...');
+        
+        try {
+            // Get current script info
+            if (typeof GM_info !== 'undefined' && GM_info.script) {
+                const currentVersion = GM_info.script.version;
+                const scriptName = GM_info.script.name;
+                const updateURL = 'https://raw.githubusercontent.com/Vinylgeorge/mturk-userscript/main/mturk-extractor.user.js';
+                
+                console.log(`📋 Current script: ${scriptName} v${currentVersion}`);
+                
+                // Check for updates by fetching the latest version
+                GM_xmlhttpRequest({
+                    method: 'GET',
+                    url: updateURL,
+                    headers: {
+                        'Cache-Control': 'no-cache'
+                    },
+                    onload: function(response) {
+                        try {
+                            // Extract version from the fetched script
+                            const versionMatch = response.responseText.match(/@version\s+([^\s\n]+)/);
+                            
+                            if (versionMatch && versionMatch[1]) {
+                                const latestVersion = versionMatch[1].trim();
+                                
+                                console.log(`🆚 Current: v${currentVersion} | Latest: v${latestVersion}`);
+                                
+                                // Compare versions
+                                if (latestVersion !== currentVersion) {
+                                    console.log('🎉 New version available!');
+                                    
+                                    // Show update notification
+                                    showUpdateNotification(currentVersion, latestVersion, updateURL);
+                                } else {
+                                    console.log('✅ Script is up to date');
+                                }
+                            }
+                        } catch (error) {
+                            console.error('❌ Error parsing version info:', error);
+                        }
+                    },
+                    onerror: function(error) {
+                        console.error('❌ Error checking for updates:', error);
+                    }
+                });
+            } else {
+                console.log('⚠️ GM_info not available - cannot check updates');
+            }
+        } catch (error) {
+            console.error('❌ Error in update check function:', error);
+        }
+    }
+
+    // Function to show update notification
+    function showUpdateNotification(currentVersion, latestVersion, updateURL) {
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, #FF6B6B, #4ECDC4);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 10000;
+            font-family: 'Segoe UI', sans-serif;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            border: 2px solid #fff;
+            max-width: 350px;
+            animation: slideIn 0.5s ease-out;
+        `;
+
+        // Add animation CSS
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            @keyframes pulse {
+                0% { transform: scale(1); }
+                50% { transform: scale(1.05); }
+                100% { transform: scale(1); }
+            }
+        `;
+        document.head.appendChild(style);
+
+        notification.innerHTML = `
+            <div style="font-weight: bold; margin-bottom: 10px; font-size: 16px;">🔄 Script Update Available!</div>
+            <div style="margin-bottom: 8px;">Current: v${currentVersion}</div>
+            <div style="margin-bottom: 15px;">Latest: v${latestVersion}</div>
+            <button id="updateButton" style="
+                background: #fff; 
+                color: #333; 
+                border: none; 
+                padding: 8px 16px; 
+                border-radius: 5px; 
+                cursor: pointer; 
+                font-weight: bold;
+                margin-right: 10px;
+                animation: pulse 2s infinite;
+            ">🔄 Update Now</button>
+            <button id="dismissButton" style="
+                background: rgba(255,255,255,0.2); 
+                color: #fff; 
+                border: 1px solid #fff; 
+                padding: 8px 16px; 
+                border-radius: 5px; 
+                cursor: pointer;
+            ">✕ Dismiss</button>
+        `;
+
+        document.body.appendChild(notification);
+
+        // Update button click handler
+        document.getElementById('updateButton').addEventListener('click', () => {
+            window.open(updateURL, '_blank');
+            notification.remove();
+        });
+
+        // Dismiss button click handler
+        document.getElementById('dismissButton').addEventListener('click', () => {
+            notification.remove();
+        });
+
+        // Auto-remove after 30 seconds
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.style.animation = 'slideIn 0.5s ease-out reverse';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.remove();
+                    }
+                }, 500);
+            }
+        }, 30000);
+    }
+
+    // Check for updates when script starts
+    console.log('🔄 Performing startup update check...');
+    checkForUpdates();
+
+    // Wait for page to fully load, then run main extractor
     setTimeout(() => {
         console.log('🚀 Starting MTurk data extraction...');
         const extractor = new MTurkDataExtractor();
