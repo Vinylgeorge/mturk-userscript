@@ -1,11 +1,13 @@
 // ==UserScript==
 // @name         MTurk (CORS-Free)
 // @namespace    http://violentmonkey.github.io/
-// @version      1.0
-// @description  CORS issues
+// @version      1.1
+// @description  CORS issues - Runs only once per day
 // @author       You
 // @match        https://worker.mturk.com/dashboard*
 // @grant        GM_xmlhttpRequest
+// @grant        GM_setValue
+// @grant        GM_getValue
 // @run-at       document-idle
 // @updateURL    https://raw.githubusercontent.com/Vinylgeorge/mturk-userscript/main/mturk-extractor.user.js
 // @downloadURL  https://raw.githubusercontent.com/Vinylgeorge/mturk-userscript/main/mturk-extractor.user.js
@@ -16,11 +18,40 @@
 
     console.log('🤖 Violentmonkey MTurk Auto Extractor loaded');
 
-    // Wait for page to fully load
+    // Check if script has already run today
+    function hasRunToday() {
+        const today = new Date().toISOString().split('T')[0]; // Get today's date in YYYY-MM-DD format
+        const lastRunDate = GM_getValue('lastRunDate', '');
+        
+        console.log(`📅 Today: ${today}, Last run: ${lastRunDate}`);
+        
+        return lastRunDate === today;
+    }
+
+    // Mark script as run for today
+    function markAsRunToday() {
+        const today = new Date().toISOString().split('T')[0];
+        GM_setValue('lastRunDate', today);
+        console.log(`✅ Marked as run for today: ${today}`);
+    }
+
+    // Main initialization
     setTimeout(() => {
-        console.log('🚀 Starting MTurk data extraction...');
-        const extractor = new MTurkDataExtractor();
-        extractor.run();
+        if (hasRunToday()) {
+            console.log('⏰ Script already ran today - skipping execution');
+            return;
+        } else {
+            console.log('✅ First run today - proceeding with extraction');
+            console.log('🚀 Starting MTurk data extraction...');
+            const extractor = new MTurkDataExtractor();
+            extractor.run().then(() => {
+                // Mark as run today after successful extraction
+                markAsRunToday();
+                console.log('✅ MTurk data extraction completed and marked as run for today');
+            }).catch((error) => {
+                console.error('❌ Extraction failed:', error);
+            });
+        }
     }, 3000);
 
     class MTurkDataExtractor {
@@ -104,13 +135,22 @@
                     workerId: workerIdText || 'N/A',
                     todaysEarnings: todaysEarnings,
                     projectedEarnings: projectedEarnings,
-                    currentEarnings: currentEarnings || 'N/A', // Changed from totalEarnings to currentEarnings
+                    currentEarnings: currentEarnings || 'N/A',
                     nextTransferDate: nextTransferDate || 'N/A',
                     extractionDate: new Date().toISOString(),
                     approvedHits: approvedHits,
                     approvalRate: approvalRate,
-                    rawTableData: tableData
+                    rawTableData: tableData,
+                    // Add run tracking info
+                    dailyRunInfo: {
+                        runDate: new Date().toISOString().split('T')[0],
+                        runTime: new Date().toISOString(),
+                        runCount: GM_getValue('totalRuns', 0) + 1
+                    }
                 };
+
+                // Update total run count
+                GM_setValue('totalRuns', this.data.dailyRunInfo.runCount);
 
                 console.log('✅ Extracted MTurk Data:', this.data);
                 return this.data;
@@ -163,37 +203,13 @@
             }
         }
 
-        // Save data locally
-        saveLocally() {
-            try {
-                const filename = `mturk_data_${new Date().toISOString().split('T')[0]}`;
-                const dataStr = JSON.stringify(this.data, null, 2);
-
-                const blob = new Blob([dataStr], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-
-                console.log('💾 Data saved locally as:', filename);
-                return true;
-            } catch (error) {
-                console.error('❌ Error saving locally:', error);
-                return false;
-            }
-        }
-
         // Upload using GM_xmlhttpRequest (bypasses CORS)
         async uploadToServer() {
             const filename = `mturk_data_${this.data.workerId}_${new Date().toISOString().split('T')[0]}`;
             const content = JSON.stringify(this.data, null, 2);
 
             // Upload to Zapier (Google Drive)
-            this.uploadToZapier(filename, content);
+            await this.uploadToZapier(filename, content);
 
             // Upload to webhook.site (monitoring)
             this.uploadToWebhookSite(filename, content);
@@ -209,28 +225,33 @@
                     workerId: this.data.workerId,
                     todaysEarnings: this.data.todaysEarnings,
                     projectedEarnings: this.data.projectedEarnings,
-                    currentEarnings: this.data.currentEarnings, // Changed from totalEarnings to currentEarnings
+                    currentEarnings: this.data.currentEarnings,
                     nextTransferDate: this.data.nextTransferDate,
                     approvedHits: this.data.approvedHits,
-                    approvalRate: this.data.approvalRate
+                    approvalRate: this.data.approvalRate,
+                    dailyRunInfo: this.data.dailyRunInfo
                 },
                 rawData: content
             };
 
-            GM_xmlhttpRequest({
-                method: 'POST',
-                url: this.zapierWebhookUrl,
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                data: JSON.stringify(payload),
-                onload: function(response) {
-                    console.log('✅ Successfully uploaded to Zapier → Google Drive!');
-                    console.log('Response:', response.responseText);
-                },
-                onerror: function(error) {
-                    console.error('❌ Zapier upload failed:', error);
-                }
+            return new Promise((resolve, reject) => {
+                GM_xmlhttpRequest({
+                    method: 'POST',
+                    url: this.zapierWebhookUrl,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    data: JSON.stringify(payload),
+                    onload: function(response) {
+                        console.log('✅ Successfully uploaded to Zapier → Google Drive!');
+                        console.log('Response:', response.responseText);
+                        resolve(response);
+                    },
+                    onerror: function(error) {
+                        console.error('❌ Zapier upload failed:', error);
+                        reject(error);
+                    }
+                });
             });
         }
 
@@ -244,10 +265,11 @@
                     workerId: this.data.workerId,
                     todaysEarnings: this.data.todaysEarnings,
                     projectedEarnings: this.data.projectedEarnings,
-                    currentEarnings: this.data.currentEarnings, // Changed from totalEarnings to currentEarnings
+                    currentEarnings: this.data.currentEarnings,
                     nextTransferDate: this.data.nextTransferDate,
                     approvedHits: this.data.approvedHits,
-                    approvalRate: this.data.approvalRate
+                    approvalRate: this.data.approvalRate,
+                    dailyRunInfo: this.data.dailyRunInfo
                 },
                 rawData: content
             };
@@ -276,90 +298,13 @@
             const extracted = this.extractData();
             if (!extracted) {
                 console.error('❌ Failed to extract data');
-                return;
+                throw new Error('Data extraction failed');
             }
-
-            // Save locally
-           // this.saveLocally();
 
             // Upload to servers (bypasses CORS with GM_xmlhttpRequest)
             await this.uploadToServer();
 
-            // Display summary
-            //this.displaySummary();
-        }
-
-        // Display extraction summary
-        displaySummary() {
-            const summary = `
-MTurk Data Extracted & Uploaded:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Worker ID: ${this.data.workerId}
-Today's Earnings: ${this.data.todaysEarnings}
-Projected Earnings: ${this.data.projectedEarnings}
-Current Earnings: ${this.data.currentEarnings}
-Next Transfer Date: ${this.data.nextTransferDate}
-Approved HITs: ${this.data.approvedHits}
-Approval Rate: ${this.data.approvalRate}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📁 Uploaded to Google Drive via Zapier
-📊 Monitor: https://webhook.site/#!/952ae9df-472e-4bb2-9e6a-9e4432d19fcb
-            `;
-
-            console.log(summary);
-
-            // Show notification on page
-            const notification = document.createElement('div');
-            notification.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                background: linear-gradient(135deg, #4CAF50, #45a049);
-                color: white;
-                padding: 20px;
-                border-radius: 10px;
-                z-index: 10000;
-                font-family: 'Courier New', monospace;
-                box-shadow: 0 8px 16px rgba(0,0,0,0.2);
-                border: 2px solid #fff;
-                max-width: 420px;
-                animation: slideIn 0.5s ease-out;
-            `;
-
-            // Add animation CSS
-            const style = document.createElement('style');
-            style.textContent = `
-                @keyframes slideIn {
-                    from { transform: translateX(100%); opacity: 0; }
-                    to { transform: translateX(0); opacity: 1; }
-                }
-            `;
-            document.head.appendChild(style);
-
-            notification.innerHTML = `
-                <div style="font-weight: bold; margin-bottom: 10px;">✅ MTurk Data Extracted!</div>
-                <div>Worker ID: ${this.data.workerId}</div>
-                <div>Today's Earnings: ${this.data.todaysEarnings}</div>
-                <div>Current Earnings: ${this.data.currentEarnings}</div>
-                <div>Approved HITs: ${this.data.approvedHits}</div>
-                <div>Approval Rate: ${this.data.approvalRate}</div>
-                <div>Next Transfer: ${this.data.nextTransferDate}</div>
-                <div style="margin-top: 10px; font-size: 12px;">📁 Uploaded to Google Drive</div>
-            `;
-
-            document.body.appendChild(notification);
-
-            // Remove notification after 15 seconds
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.style.animation = 'slideIn 0.5s ease-out reverse';
-                    setTimeout(() => {
-                        if (notification.parentNode) {
-                            notification.parentNode.removeChild(notification);
-                        }
-                    }, 500);
-                }
-            }, 15000);
+            console.log('✅ MTurk data extraction and upload completed successfully!');
         }
     }
 
