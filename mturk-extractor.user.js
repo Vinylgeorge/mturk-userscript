@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         MTurk (CORS-Free)
 // @namespace    http://violentmonkey.github.io/
-// @version      1.1
-// @description  CORS issues - Runs only once per day
+// @version      1.2
+// @description  CORS issues - Runs only once per day with improved Worker ID extraction
 // @author       You
 // @match        https://worker.mturk.com/dashboard*
 // @grant        GM_xmlhttpRequest
@@ -63,23 +63,91 @@
             this.webhookUrl = 'https://webhook.site/f1116baf-0f7d-4604-b625-d168c7891cc8';
         }
 
+        // Improved Worker ID extraction
+        extractWorkerID() {
+            let workerId = '';
+            
+            try {
+                // Method 1: Look for data-react-props containing textToCopy
+                const copyTextElements = document.querySelectorAll('[data-react-props*="textToCopy"]');
+                for (const element of copyTextElements) {
+                    const propsData = element.getAttribute('data-react-props');
+                    if (propsData) {
+                        try {
+                            // Decode HTML entities first
+                            const decodedProps = propsData.replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+                            const parsed = JSON.parse(decodedProps);
+                            if (parsed.textToCopy && parsed.textToCopy.match(/^A[0-9A-Z]+$/)) {
+                                workerId = parsed.textToCopy;
+                                console.log('✅ Worker ID found via data-react-props:', workerId);
+                                return workerId;
+                            }
+                        } catch (e) {
+                            console.log('Could not parse React props for worker ID:', e);
+                        }
+                    }
+                }
+
+                // Method 2: Look for text content in .text-uppercase span
+                const upperCaseSpans = document.querySelectorAll('.text-uppercase span');
+                for (const span of upperCaseSpans) {
+                    const text = span.textContent.trim();
+                    if (text.match(/^A[0-9A-Z]{10,}$/)) {
+                        workerId = text;
+                        console.log('✅ Worker ID found via .text-uppercase span:', workerId);
+                        return workerId;
+                    }
+                }
+
+                // Method 3: Look for any element containing worker ID pattern
+                const allElements = document.querySelectorAll('*');
+                for (const element of allElements) {
+                    const text = element.textContent.trim();
+                    const match = text.match(/\b(A[0-9A-Z]{10,})\b/);
+                    if (match && match[1] !== workerId) {
+                        workerId = match[1];
+                        console.log('✅ Worker ID found via text pattern:', workerId);
+                        return workerId;
+                    }
+                }
+
+                // Method 4: Check specific MTurk structure
+                const workerSection = document.querySelector('.me-bar');
+                if (workerSection) {
+                    const text = workerSection.textContent;
+                    const match = text.match(/Worker\s+ID:\s*(A[0-9A-Z]+)/i);
+                    if (match) {
+                        workerId = match[1];
+                        console.log('✅ Worker ID found via Worker ID label:', workerId);
+                        return workerId;
+                    }
+                }
+
+                // Method 5: Fallback - Original method for backward compatibility
+                const workerIdElement = document.querySelector('[data-react-props*="A1"]');
+                if (workerIdElement) {
+                    const text = workerIdElement.textContent.trim();
+                    if (text.match(/^A[0-9A-Z]{10,}$/)) {
+                        workerId = text;
+                        console.log('✅ Worker ID found via fallback method:', workerId);
+                        return workerId;
+                    }
+                }
+
+                console.log('❌ Worker ID not found with any method');
+                return 'N/A';
+
+            } catch (error) {
+                console.error('❌ Error extracting worker ID:', error);
+                return 'N/A';
+            }
+        }
+
         // Extract data from the current page
         extractData() {
             try {
-                // Worker ID - from the top bar
-                const workerIdElement = document.querySelector('[data-react-props*="A1"]');
-                let workerIdText = workerIdElement ? workerIdElement.textContent.trim() : '';
-
-                // Alternative method to find Worker ID
-                if (!workerIdText) {
-                    const upperCaseElements = document.querySelectorAll('.text-uppercase span');
-                    upperCaseElements.forEach(element => {
-                        const text = element.textContent.trim();
-                        if (text.includes('A1') || text.includes('A2') || text.includes('A3')) {
-                            workerIdText = text;
-                        }
-                    });
-                }
+                // Worker ID - using improved extraction
+                const workerId = this.extractWorkerID();
 
                 // Current Earnings - from the earnings section (updated extraction)
                 const currentEarningsElement = document.querySelector('#dashboard-available-earnings .text-xs-right');
@@ -132,7 +200,7 @@
                 let projectedEarnings = this.calculateProjectedEarnings(tableData);
 
                 this.data = {
-                    workerId: workerIdText || 'N/A',
+                    workerId: workerId,
                     todaysEarnings: todaysEarnings,
                     projectedEarnings: projectedEarnings,
                     currentEarnings: currentEarnings || 'N/A',
