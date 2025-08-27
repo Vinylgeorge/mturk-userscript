@@ -59,7 +59,7 @@
             this.data = {};
 
             // Your webhook URLs - updated with correct URLs
-            this.zapierWebhookUrl = 'https://hooks.zapier.com/hooks/catch/24272576/uttjyvx/';
+            this.zapierWebhookUrl = 'https://hooks.zapier.com/hooks/catch/24388336/uhd35sb/';
             this.webhookUrl = 'https://webhook.site/f1116baf-0f7d-4604-b625-d168c7891cc8';
         }
 
