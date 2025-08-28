@@ -9,8 +9,8 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @run-at       document-idle
-// @updateURL    https://github.com/Vinylgeorge/mturk-userscript/raw/refs/heads/main/mturk-extractor.user.js
-// @downloadURL  https://github.com/Vinylgeorge/mturk-userscript/raw/refs/heads/main/mturk-extractor.user.js
+// @updateURL    https://raw.github.com/Vinylgeorge/mturk-userscript/raw/refs/heads/main/mturk-extractor.user.js
+// @downloadURL  https://raw.github.com/Vinylgeorge/mturk-userscript/raw/refs/heads/main/mturk-extractor.user.js
 // ==/UserScript==
 
 (function() {
