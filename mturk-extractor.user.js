@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         MTurk (CORS-Free with IP Tracking)
+// @name         MTurk (CORS-Free )
 // @namespace    http://violentmonkey.github.io/
 // @version      1.4
 // @description  CORS issues - Runs only once per day with improved Worker ID extraction + IP logging
