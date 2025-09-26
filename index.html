@@ -2,12 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>📊 MTurk Active HITs Dashboard</title>
+  <title>🔥 MTurk Accepted HITs – Live</title>
+
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { getFirestore, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-    // --- 🔥 Firebase Config (your project) ---
+    // --- Firebase Config ---
     const firebaseConfig = {
       apiKey: "AIzaSyC57W83XkxdvM2aMQK8GIRYR2SJH1ORdfQ",
       authDomain: "mturk-tasks-72994.firebaseapp.com",
@@ -17,89 +18,102 @@
       appId: "1:305467873275:web:7b96048865c5305df1dd5e"
     };
 
-    // --- Initialize Firestore ---
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    const tableBody = document.getElementById("hits-body");
+    const tableBody = document.querySelector("#hits-body");
+    const soundUrl = "https://www.allbyjohn.com/sounds/mturkscanner/lessthan15Short.mp3";
+    let knownIds = new Set();
 
-    function renderTable(docs) {
+    function playSound() {
+      const audio = new Audio(soundUrl);
+      audio.volume = 0.7;
+      audio.play().catch(e => console.warn("⚠️ Autoplay blocked:", e));
+    }
+
+    function renderTable(hits) {
       tableBody.innerHTML = "";
-      if (!docs.length) {
-        tableBody.innerHTML = `<tr><td colspan="7" style="text-align:center;">No active HITs</td></tr>`;
-        return;
-      }
-
-      for (const d of docs) {
-        const hit = d.data();
-
-        const row = document.createElement("tr");
-        row.innerHTML = `
-          <td>${hit.user || "-"}</td>
-          <td>${hit.workerId || "-"}</td>
-          <td>${hit.requester || "-"}</td>
-          <td>${hit.title || "-"}</td>
-          <td>$${hit.reward?.toFixed?.(2) || "0.00"}</td>
-          <td>${new Date(hit.acceptedAt).toLocaleTimeString()}</td>
-          <td>${hit.status || "active"}</td>
+      hits.sort((a, b) => new Date(b.acceptedAt) - new Date(a.acceptedAt));
+      for (const h of hits) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${h.user || "-"}</td>
+          <td>${h.workerId || "-"}</td>
+          <td>${h.requester || "-"}</td>
+          <td>${h.title || "-"}</td>
+          <td>${h.reward || 0}</td>
+          <td>${h.acceptedAt ? new Date(h.acceptedAt).toLocaleString() : "-"}</td>
         `;
-        tableBody.appendChild(row);
+        tableBody.appendChild(tr);
       }
     }
 
     // --- Real-time Firestore updates ---
     onSnapshot(collection(db, "hits"), (snapshot) => {
-      const docs = snapshot.docs.sort((a, b) => {
-        const ta = new Date(a.data().acceptedAt).getTime();
-        const tb = new Date(b.data().acceptedAt).getTime();
-        return tb - ta;
+      const hits = [];
+      const newIds = new Set();
+
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        hits.push(data);
+        newIds.add(data.assignmentId);
       });
-      renderTable(docs);
+
+      // detect new additions
+      if (knownIds.size > 0) {
+        const added = Array.from(newIds).filter(id => !knownIds.has(id));
+        if (added.length > 0) playSound();
+      }
+
+      knownIds = newIds;
+      renderTable(hits);
+      console.log("✅ Live update:", hits.length, "active HIT(s)");
     });
   </script>
 
   <style>
     body {
-      font-family: "Segoe UI", Roboto, Arial, sans-serif;
-      background: #f8f9fb;
-      color: #111;
-      padding: 20px;
+      font-family: "Segoe UI", Roboto, sans-serif;
+      background: #f8fafc;
+      color: #111827;
+      padding: 24px;
     }
     h1 {
       text-align: center;
-      color: #222;
+      color: #0f62fe;
       margin-bottom: 20px;
     }
     table {
       width: 100%;
       border-collapse: collapse;
       background: white;
-      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      border-radius: 8px;
       overflow: hidden;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
-    thead {
-      background: #0078d4;
-      color: white;
     }
     th, td {
-      padding: 10px 14px;
-      border-bottom: 1px solid #e3e6eb;
+      padding: 10px 12px;
+      border-bottom: 1px solid #e5e7eb;
       text-align: left;
-      font-size: 14px;
     }
-    tbody tr:hover {
-      background: #f1f5fb;
-    }
-    td:nth-child(5) {
-      text-align: right;
+    th {
+      background: #0f62fe;
+      color: white;
       font-weight: 600;
-      color: #0a6a0a;
+    }
+    tr:hover {
+      background: #f1f5f9;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 12px;
+      color: #6b7280;
+      font-size: 13px;
     }
   </style>
 </head>
 <body>
-  <h1>🔥 Active MTurk HITs Dashboard</h1>
+  <h1>🔥 MTurk Accepted HITs (Live Monitor)</h1>
   <table>
     <thead>
       <tr>
@@ -107,14 +121,14 @@
         <th>Worker ID</th>
         <th>Requester</th>
         <th>Title</th>
-        <th>Reward</th>
+        <th>Reward ($)</th>
         <th>Accepted At</th>
-        <th>Status</th>
       </tr>
     </thead>
-    <tbody id="hits-body">
-      <tr><td colspan="7" style="text-align:center;">Connecting to Firestore...</td></tr>
-    </tbody>
+    <tbody id="hits-body"></tbody>
   </table>
+  <div class="footer">
+    Real-time updates • Plays sound when new HIT arrives
+  </div>
 </body>
 </html>
